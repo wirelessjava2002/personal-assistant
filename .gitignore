@@ -1,0 +1,40 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs and debug output
+*.log
+
+# Environment variables
+.env
+
+# VS Code settings (if you're using VS Code)
+.vscode/
+
+# Pytest cache
+.pytest_cache/
+
+# Mypy cache
+.mypy_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
