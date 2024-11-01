@@ -1,6 +1,6 @@
 # Personal Assistant with LangChain
 
-This project is a personal assistant built using LangChain, designed to interact with your personal documents, primarily in Markdown format. It utilizes machine learning models to answer questions based on the content of these documents.
+This project is a personal assistant built using LangChain, designed to interact with  personal documents, primarily in Markdown format. It utilizes machine learning models to answer questions based on the content of these documents.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -20,7 +20,7 @@ Ensure you have a Gitpod workspace initialized and that you have Python and Pip 
 
 ## Project Structure
 
-Your project should follow this structure:
+The project should follow this structure:
 
 ```
 your-project/
@@ -46,7 +46,7 @@ pip install langchain[all] python-dotenv
 
 ## Loading Markdown Documents
 
-In your `app.py`, create functions to load and split your Markdown documents:
+In the `app.py`, create functions to load and split your Markdown documents:
 
 ```python
 import os
@@ -137,7 +137,7 @@ if __name__ == "__main__":
 
 ## Running the Application
 
-Save your changes and run your application in the Gitpod terminal:
+Save the changes and run your application in the Gitpod terminal:
 
 ```bash
 python app.py
@@ -166,7 +166,7 @@ graph TD;
 
 ---
 
-This README provides an overview of your project, including setup instructions, code snippets, and future directions. 
+This README provides an overview of the project, including setup instructions, code snippets, and future directions. 
 
 
 
