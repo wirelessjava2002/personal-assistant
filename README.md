@@ -42,6 +42,13 @@ Install LangChain and its dependencies by running the following command in the t
 
 ```bash
 pip install langchain[all] python-dotenv
+pip install -U langchain-community
+pip install "unstructured[all]"
+pip install "unstructured[md]"
+pip install openai
+pip install tiktoken
+pip install faiss-cpu
+
 ```
 
 ## Loading Markdown Documents
