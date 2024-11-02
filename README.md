@@ -49,6 +49,8 @@ pip install openai
 pip install tiktoken
 pip install faiss-cpu
 
+pip install langchain-anthropic anthropic python-dotenv
+
 ```
 
 ## Loading Markdown Documents
