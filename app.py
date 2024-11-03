@@ -4,18 +4,18 @@ import subprocess
 import shutil
 import platform
 import logging
+import threading
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from enum import Enum
-import threading
 from rich.console import Console
 from rich.logging import RichHandler
 
 # LangChain imports
 from langchain_community.document_loaders import DirectoryLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.chains import RetrievalQA
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -49,12 +49,46 @@ class AssistantConfig:
 class PersonalAssistant:
     def __init__(self, config: AssistantConfig):
         self.config = config
+        self._setup_linux_audio()
         self.speech_engine = self._initialize_speech_engine() if config.speech_enabled else None
         self.embeddings = self._initialize_embeddings()
         self.vector_store = None
         self.qa_chain = None
         self.llm = None
-        
+
+    def _setup_linux_audio(self) -> None:
+        """Set up audio system for Linux/GitPod environment."""
+        if platform.system() == "Linux":
+            try:
+                commands = [
+                    "sudo apt-get update",
+                    "sudo apt-get install -y alsa-utils pulseaudio espeak sox",
+                    "pulseaudio --start",
+                    "sudo alsa force-reload",
+                ]
+                
+                for cmd in commands:
+                    process = subprocess.Popen(
+                        cmd.split(),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    stdout, stderr = process.communicate()
+                    
+                    if process.returncode != 0:
+                        logger.warning(f"Command '{cmd}' failed: {stderr.decode()}")
+                    
+                subprocess.run(["amixer", "sset", "Master", "unmute"], 
+                             stdout=subprocess.DEVNULL, 
+                             stderr=subprocess.DEVNULL)
+                subprocess.run(["amixer", "sset", "Master", "100%"], 
+                             stdout=subprocess.DEVNULL, 
+                             stderr=subprocess.DEVNULL)
+                
+                logger.info("Audio system configured for Linux environment")
+            except Exception as e:
+                logger.error(f"Failed to configure audio system: {e}")
+
     def _initialize_embeddings(self) -> HuggingFaceEmbeddings:
         """Initialize Hugging Face embeddings."""
         try:
@@ -64,118 +98,96 @@ class PersonalAssistant:
             raise
 
     def _check_system_audio(self) -> bool:
-        """
-        Check system audio configuration with detailed diagnostics.
-        Returns True if the system has working audio capabilities.
-        """
-        system = platform.system()
-        
-        if system == "Linux":
-            # Check if speaker-test command exists
-            speaker_test = shutil.which('speaker-test')
-            if not speaker_test:
-                logger.warning("speaker-test not found. Installing alsa-utils might help.")
-                return False
-
-            # Test if audio device is available without producing output
+        """Check system audio configuration."""
+        if platform.system() == "Linux":
             try:
-                with open(os.devnull, 'w') as devnull:
-                    result = subprocess.run(
-                        ['speaker-test', '-t', 'sine', '-f', '1000', '-l', '1', '-D', 'default'],
-                        stdout=devnull,
-                        stderr=devnull,
-                        timeout=1
-                    )
-                return result.returncode == 0
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-                logger.warning("""
-                Audio system check failed. To fix this:
-                1. Install ALSA utilities:
-                   sudo apt-get install alsa-utils
-                2. Configure your sound card:
-                   sudo alsactl init
-                3. Unmute audio:
-                   amixer sset Master unmute
-                   amixer sset Speaker unmute
-                   amixer sset Headphone unmute
-                """)
+                test_file = "/tmp/test.wav"
+                subprocess.run([
+                    "sox", "-n", test_file, 
+                    "synth", "0.1", "sine", "1000"
+                ], check=True)
+                
+                process = subprocess.run(
+                    ["aplay", test_file],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE
+                )
+                
+                if process.returncode == 0:
+                    logger.info("Audio system check passed")
+                    return True
+                else:
+                    logger.warning(f"Audio check failed: {process.stderr.decode()}")
+                    return False
+                    
+            except Exception as e:
+                logger.warning(f"Audio system check failed: {e}")
                 return False
-        
         return True
 
     def _initialize_speech_engine(self) -> Optional[pyttsx3.Engine]:
-        """Initialize text-to-speech engine with improved error handling."""
-        if not self._check_system_audio():
-            logger.warning("Text-to-speech disabled due to audio system configuration issues.")
+        """Initialize text-to-speech engine."""
+        try:
+            if platform.system() == "Linux":
+                engine = pyttsx3.init('espeak')
+            else:
+                engine = pyttsx3.init()
+                
+            engine.setProperty('rate', 150)
+            engine.setProperty('volume', 0.9)
+            
+            def test_speech():
+                try:
+                    engine.say("Test")
+                    engine.runAndWait()
+                    logger.info("Speech engine test successful")
+                except Exception as e:
+                    logger.error(f"Speech engine test failed: {e}")
+            
+            test_thread = threading.Thread(target=test_speech)
+            test_thread.start()
+            test_thread.join(timeout=5)
+            
+            return engine
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize speech engine: {e}")
             return None
+
+    def speak_text(self, text: str) -> None:
+        """Speak text with improved error handling."""
+        if not self.speech_engine:
+            return
 
         try:
-            # Initialize based on platform
-            system = platform.system()
-            engine = None
-            
-            if system == "Windows":
-                engine = pyttsx3.init('sapi5')
-            elif system == "Darwin":  # macOS
-                engine = pyttsx3.init('nsss')
-            elif system == "Linux":
-                # Try espeak specifically first
-                if shutil.which('espeak'):
-                    try:
-                        engine = pyttsx3.init('espeak')
-                    except:
-                        pass
-                
-                # Fall back to default if espeak fails
-                if not engine:
-                    try:
-                        engine = pyttsx3.init()
-                    except:
-                        logger.warning("""
-                        Failed to initialize espeak. To fix this:
-                        1. Install espeak:
-                           sudo apt-get install espeak
-                        2. Make sure ALSA is properly configured:
-                           sudo apt-get install alsa-utils
-                           sudo alsactl init
-                        """)
-                        return None
+            def speak_with_timeout():
+                self.speech_engine.say(text)
+                self.speech_engine.runAndWait()
 
-            # Final fallback
-            if not engine:
-                engine = pyttsx3.init()
+            speech_thread = threading.Thread(target=speak_with_timeout)
+            speech_thread.start()
+            speech_thread.join(timeout=30)
 
-            # Test and configure the engine
-            if engine:
-                try:
-                    voices = engine.getProperty('voices')
-                    if len(voices) == 0:
-                        logger.warning("No voices found for text-to-speech")
-                        return None
-                    
-                    engine.setProperty('rate', 150)
-                    engine.setProperty('volume', 0.9)
-                    
-                    # Test the engine silently
-                    engine.setProperty('volume', 0)
-                    engine.say("test")
-                    engine.runAndWait()
-                    engine.setProperty('volume', 0.9)
-                    
-                    return engine
-                except:
-                    logger.warning("Failed to configure text-to-speech engine")
-                    return None
-
-            return None
+            if speech_thread.is_alive():
+                logger.warning("Speech synthesis timed out")
+                self.speech_engine.stop()
+                speech_thread.join(timeout=1)
 
         except Exception as e:
-            logger.warning(f"Text-to-speech initialization failed: {e}")
-            return None
+            logger.error(f"Speech failed: {e}")
+            self._setup_linux_audio()
+            self.speech_engine = self._initialize_speech_engine()
 
     def load_documents(self) -> List[Document]:
         """Load documents from the specified directory."""
         try:
+            os.makedirs(self.config.documents_path, exist_ok=True)
+            
+            if not os.listdir(self.config.documents_path):
+                sample_path = os.path.join(self.config.documents_path, "sample.md")
+                with open(sample_path, "w") as f:
+                    f.write("# Sample Document\nThis is a sample document for testing.")
+            
             loader = DirectoryLoader(
                 self.config.documents_path, 
                 glob=self.config.documents_glob
@@ -236,58 +248,16 @@ class PersonalAssistant:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
 
-    def get_model_response(self) -> str:
-        """Get a standardized model response."""
-        if self.config.llm_type == LLMType.CLAUDE:
-            return "I am Claude 3.5 Sonnet, an AI assistant created by Anthropic."
-        return "I am Gemini 1.5 Flash, an AI assistant created by Google."
-
-    def get_enhanced_prompt(self, question: str) -> str:
-        """Get model-specific enhanced prompt."""
-        if question.lower() in ['who are you', 'what are you', 'what model are you']:
-            return self.get_model_response()
-        
-        base_prompt = (
-            "You are a helpful and friendly assistant. Provide a natural, "
-            f"engaging response. Remember: {self.get_model_response()} "
-            f"Question: {question}"
-        )
-        
-        if self.config.llm_type == LLMType.GEMINI:
-            return f"Context: {self.get_model_response()}\nQuestion: {question}"
-        
-        return base_prompt
-
-    def speak_text(self, text: str) -> None:
-        """Speak text with improved error handling."""
-        if self.speech_engine:
-            try:
-                # Set a reasonable timeout for speech
-                def speak_with_timeout():
-                    self.speech_engine.say(text)
-                    self.speech_engine.runAndWait()
-                
-                speech_thread = threading.Thread(target=speak_with_timeout)
-                speech_thread.start()
-                speech_thread.join(timeout=10)  # 10 second timeout
-                
-                if speech_thread.is_alive():
-                    logger.warning("Speech synthesis timed out")
-                    # Force stop the speech
-                    self.speech_engine.stop()
-                    speech_thread.join(timeout=1)
-            
-            except Exception as e:
-                logger.warning(f"Failed to speak text: {e}")
-                # Try to reinitialize the speech engine
-                self.speech_engine = self._initialize_speech_engine()
-
     def setup(self) -> None:
         """Set up the assistant."""
-        documents = self.load_documents()
-        chunks = self.split_documents(documents)
-        self.vector_store = FAISS.from_documents(chunks, self.embeddings)
-        self.qa_chain, self.llm = self.initialize_llm()
+        try:
+            documents = self.load_documents()
+            chunks = self.split_documents(documents)
+            self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+            self.qa_chain, self.llm = self.initialize_llm()
+        except Exception as e:
+            logger.error(f"Setup failed: {e}")
+            raise
 
     def switch_llm(self) -> None:
         """Switch between Claude and Gemini."""
@@ -298,21 +268,23 @@ class PersonalAssistant:
         self.qa_chain, self.llm = self.initialize_llm()
         logger.info(f"Switched to {self.config.llm_type.value.title()}")
 
+    def get_model_response(self) -> str:
+        """Get a standardized model response."""
+        if self.config.llm_type == LLMType.CLAUDE:
+            return "I am Claude 3.5 Sonnet, an AI assistant created by Anthropic."
+        return "I am Gemini 1.5 Flash, an AI assistant created by Google."
+
     def process_query(self, question: str) -> Optional[str]:
         """Process a user query and return the response."""
         try:
+            if not question.strip():
+                return "Please enter a question."
+
             if question.lower() in ['who are you', 'what are you', 'what model are you']:
                 return self.get_model_response()
 
-            relevant_docs = self.vector_store.as_retriever().invoke(question)
-            
-            if relevant_docs:
-                response = self.qa_chain.invoke(question)
-                return response['result']
-            else:
-                enhanced_prompt = self.get_enhanced_prompt(question)
-                response = self.llm.invoke(enhanced_prompt)
-                return response.content
+            response = self.qa_chain.invoke({"query": question})
+            return response.get('result', "I couldn't generate a response.")
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
@@ -323,7 +295,10 @@ def main():
     load_dotenv(dotenv_path=".env")
 
     # Initialize with Gemini as default
-    config = AssistantConfig(llm_type=LLMType.GEMINI)
+    config = AssistantConfig(
+        llm_type=LLMType.GEMINI,
+        speech_enabled=True
+    )
     
     try:
         assistant = PersonalAssistant(config)
@@ -333,21 +308,31 @@ def main():
         console.print(f"\n[bold]Welcome to your personal assistant! ({assistant.config.llm_type.value.title()})[/bold]")
         console.print("- Type 'exit' or 'quit' to end the session")
         console.print("- Type 'switch' to change between Gemini and Claude")
-   
         
         while True:
-            question = console.input("\n[bold cyan]You:[/bold cyan] ")
-            
-            if question.lower() in ["exit", "quit"]:
-                break
-            elif question.lower() == "switch":
-                assistant.switch_llm()
-                continue
+            try:
+                question = console.input("\n[bold cyan]You:[/bold cyan] ").strip()
+                
+                if question.lower() in ["exit", "quit"]:
+                    break
+                elif question.lower() == "switch":
+                    assistant.switch_llm()
+                    continue
+                elif not question:
+                    continue
 
-            response = assistant.process_query(question)
-            if response:
-                console.print(f"\n[bold green]Assistant ({assistant.config.llm_type.value.title()}):[/bold green] {response}")
-                assistant.speak_text(response)
+                response = assistant.process_query(question)
+                if response:
+                    console.print(f"\n[bold green]Assistant ({assistant.config.llm_type.value.title()}):[/bold green] {response}")
+                    if assistant.speech_engine:
+                        assistant.speak_text(response)
+
+            except KeyboardInterrupt:
+                console.print("\n[bold yellow]Shutting down...[/bold yellow]")
+                break
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                console.print("\n[bold red]An error occurred. Please try again.[/bold red]")
 
     except Exception as e:
         logger.error(f"Fatal error: {e}")

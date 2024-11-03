@@ -30,7 +30,14 @@ cd personal-ai-assistant
 pip install -r requirements.txt
 ```
 
-3. Create a `.env` file in the project root:
+3. Set up audio (for Linux/GitPod):
+```bash
+sudo apt-get update
+sudo apt-get install -y alsa-utils pulseaudio espeak sox
+pulseaudio --start
+```
+
+4. Create a `.env` file in the project root:
 ```env
 ANTHROPIC_API_KEY=your_anthropic_api_key
 GEMINI_API_KEY=your_gemini_api_key
@@ -63,6 +70,14 @@ If you're using Linux and encounter audio issues:
 sudo apt-get install espeak alsa-utils
 sudo alsactl init
 ```
+
+## Troubleshooting
+
+If audio isn't working:
+1. Check system audio: `speaker-test -t sine -f 1000`
+2. Test espeak: `espeak "This is a test"`
+3. Verify GitPod audio permissions
+
 
 ## Configuration
 

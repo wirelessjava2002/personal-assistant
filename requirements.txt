@@ -1,0 +1,10 @@
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-anthropic==0.0.5
+langchain-google-genai==0.0.11
+python-dotenv==1.0.1
+rich==13.7.1
+pyttsx3==2.90
+faiss-cpu==1.8.0
+sentence-transformers==2.5.1
+torch==2.2.1
