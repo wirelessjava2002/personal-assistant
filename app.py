@@ -30,12 +30,22 @@ def create_vector_store(chunks):
     return vector_store
 
 def initialize_speech_engine():
-    engine = pyttsx3.init()
-    return engine
+    try:
+        engine = pyttsx3.init()
+        # Configure properties
+        engine.setProperty('rate', 150)    # Speaking rate
+        engine.setProperty('volume', 0.9)  # Volume (0.0 to 1.0)
+        return engine
+    except Exception as e:
+        print(f"TTS Initialization Error: {str(e)}")
+        return None
 
 def speak_text(engine, text):
-    engine.say(text)
-    engine.runAndWait()
+    try:
+        engine.say(text)
+        engine.runAndWait()
+    except Exception as e:
+        print(f"TTS Error: {str(e)}")
 
 def create_qa_chain(vector_store):
     # Initialize Claude 3.5 Sonnet
