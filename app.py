@@ -31,6 +31,10 @@ def create_vector_store(chunks):
 
 def initialize_speech_engine():
     try:
+        # Suppress ALSA errors
+        import warnings
+        warnings.filterwarnings("ignore")
+        
         # Try espeak driver first
         engine = pyttsx3.init(driverName='espeak')
         if engine is None:
@@ -126,10 +130,17 @@ def main():
                 print(f"\nAssistant: {response_text}")
                 speak_text(speech_engine, response_text)
             else:
-                # If no documents are found, fall back to the LLM's response
-                fallback_response = llm.invoke(question)
+                # If no documents are found, create a more engaging prompt for general queries
+                enhanced_prompt = (
+                    "You are a helpful and friendly assistant. The user has asked a question "
+                    "that's not related to any specific documents. Please provide a natural, "
+                    "engaging response. If they're asking for something fun like a joke or story, "
+                    "feel free to be creative and entertaining while remaining appropriate. "
+                    f"Here's their question: {question}"
+                )
+                fallback_response = llm.invoke(enhanced_prompt)
                 fallback_text = fallback_response.content
-                print(f"\nAssistant (fallback): {fallback_text}")
+                print(f"\nAssistant: {fallback_text}")
                 speak_text(speech_engine, fallback_text)
         except Exception as e:
             print(f"\nError: {str(e)}")
