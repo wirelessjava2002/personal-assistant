@@ -1,184 +1,112 @@
-# Personal Assistant with LangChain
+# Personal AI Assistant
 
-This project is a personal assistant built using LangChain, designed to interact with  personal documents, primarily in Markdown format. It utilizes machine learning models to answer questions based on the content of these documents.
+A versatile command-line AI assistant that combines the power of Claude and Gemini models with document processing and text-to-speech capabilities. This assistant can understand context from your documents and provide natural, engaging responses while also offering voice output.
 
-## Table of Contents
-- [Prerequisites](#prerequisites)
-- [Project Structure](#project-structure)
-- [Installation](#installation)
-- [Loading Markdown Documents](#loading-markdown-documents)
-- [Creating an Embedding Model](#creating-an-embedding-model)
-- [Creating a Retrieval QA Chain](#creating-a-retrieval-qa-chain)
-- [User Interaction](#user-interaction)
-- [Running the Application](#running-the-application)
-- [Next Steps](#next-steps)
-- [Diagram](#diagram)
+## Features
+
+- 🤖 Dual AI Model Support: Switch between Claude 3.5 Sonnet and Gemini 1.5 Flash
+- 📚 Document Processing: Loads and processes local documents for contextual responses
+- 🔊 Text-to-Speech: Voice output support across different operating systems
+- 🔄 Real-time Model Switching: Seamlessly switch between AI models during conversation
+- 📝 Vector Store Integration: Uses FAISS for efficient document retrieval
+- 🎯 Context-Aware Responses: Leverages document context for more accurate answers
 
 ## Prerequisites
 
-Ensure you have a Gitpod workspace initialized and that you have Python and Pip installed.
-
-## Project Structure
-
-The project should follow this structure:
-
-```
-your-project/
-│
-├── documents/            # Directory for your markdown documents
-│   ├── doc1.md
-│   ├── doc2.md
-│
-├── .gitpod.yml           # Gitpod configuration
-├── .gitpod.Dockerfile    # Dockerfile for Gitpod environment
-├── .env                  # Environment variables (for API keys)
-├── app.py                # Main application code
-└── requirements.txt      # Python dependencies
-```
+- Python 3.8+
+- An Anthropic API key (for Claude)
+- A Google API key (for Gemini)
 
 ## Installation
 
-Install LangChain and its dependencies by running the following command in the terminal:
-
+1. Clone the repository:
 ```bash
-pip install langchain[all] python-dotenv
-pip install -U langchain-community
-pip install "unstructured[all]"
-pip install "unstructured[md]"
-pip install openai
-pip install tiktoken
-pip install faiss-cpu
-
-pip install langchain-anthropic anthropic python-dotenv
-
+git clone <repository-url>
+cd personal-ai-assistant
 ```
 
-## Loading Markdown Documents
-
-In the `app.py`, create functions to load and split your Markdown documents:
-
-```python
-import os
-from langchain.document_loaders import DirectoryLoader
-from langchain.text_splitter import CharacterTextSplitter
-
-# Load Markdown documents
-def load_documents():
-    loader = DirectoryLoader("documents", glob="*.md")
-    documents = loader.load()
-    return documents
-
-# Split documents into manageable chunks
-def split_documents(documents):
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    return text_splitter.split_documents(documents)
-```
-
-## Creating an Embedding Model
-
-You can create an embedding model to represent your documents as follows:
-
-```python
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-
-# Initialize the embedding model
-embeddings = OpenAIEmbeddings()
-
-# Create a vector store for your document chunks
-def create_vector_store(chunks):
-    vector_store = FAISS.from_documents(chunks, embeddings)
-    return vector_store
-```
-
-Set your OpenAI API key in the `.env` file:
-
-```
-OPENAI_API_KEY=your_api_key_here
-```
-
-Load the API key in your application:
-
-```python
-from dotenv import load_dotenv
-
-load_dotenv()
-```
-
-## Creating a Retrieval QA Chain
-
-To create a question-answering system, set up a Retrieval QA chain:
-
-```python
-from langchain.chains import RetrievalQA
-from langchain.llms import OpenAI
-
-# Create a retrieval QA chain
-def create_qa_chain(vector_store):
-    llm = OpenAI(temperature=0)  # Adjust temperature for randomness
-    qa_chain = RetrievalQA.from_chain_type(llm, chain_type="stuff", retriever=vector_store.as_retriever())
-    return qa_chain
-```
-
-## User Interaction
-
-Implement user interaction with a simple loop:
-
-```python
-def main():
-    documents = load_documents()
-    chunks = split_documents(documents)
-    vector_store = create_vector_store(chunks)
-    qa_chain = create_qa_chain(vector_store)
-
-    print("Welcome to your personal assistant! Ask me anything about your documents.")
-    
-    while True:
-        question = input("You: ")
-        if question.lower() in ["exit", "quit"]:
-            break
-        answer = qa_chain.run(question)
-        print(f"Assistant: {answer}")
-
-if __name__ == "__main__":
-    main()
-```
-
-## Running the Application
-
-Save the changes and run your application in the Gitpod terminal:
-
+2. Install required dependencies:
 ```bash
-python app.py
+pip install -r requirements.txt
 ```
 
-You should now be able to ask questions based on the content of your Markdown documents.
+3. Create a `.env` file in the project root:
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key
+GEMINI_API_KEY=your_gemini_api_key
+```
 
-## Next Steps
-- Improve Document Processing: Explore different document loaders and text splitters.
-- Customize the LLM: Experiment with different parameters and embeddings.
-- Add More Features: Implement functionality for summarization or integrate with other APIs.
-- Explore Other Models: Test different LLMs or frameworks.
-- Testing and Deployment: Write tests and learn about deployment options.
+## Usage
 
-## Diagram
+1. Place your documents in the `documents` directory (supports Markdown files by default)
+
+2. Run the assistant:
+```bash
+python main.py
+```
+
+3. Interactive Commands:
+- Type your questions or prompts naturally
+- Type 'switch' to toggle between Claude and Gemini models
+- Type 'exit' or 'quit' to end the session
+
+## System Requirements
+
+### Audio Support
+- Windows: SAPI5
+- macOS: NSSS
+- Linux: espeak and ALSA utilities
+
+### Linux Audio Setup
+If you're using Linux and encounter audio issues:
+```bash
+sudo apt-get install espeak alsa-utils
+sudo alsactl init
+```
+
+## Configuration
+
+The assistant can be configured through the `AssistantConfig` class:
+
+```python
+config = AssistantConfig(
+    llm_type=LLMType.GEMINI,  # or LLMType.CLAUDE
+    chunk_size=1000,
+    chunk_overlap=200,
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    speech_enabled=True,
+    documents_path="documents",
+    documents_glob="*.md"
+)
+```
+
+## System Architecture
 
 ```mermaid
-graph TD;
-    A[Load Documents] --> B[Split Documents];
-    B --> C[Create Embedding Model];
-    C --> D[Create Vector Store];
-    D --> E[Create QA Chain];
-    E --> F[User Interaction];
-    F --> G[Answer Questions];
+flowchart TD
+    subgraph Input
+        A[Documents] --> B[DirectoryLoader]
+        B --> C[CharacterTextSplitter]
+        C --> D[Document Chunks]
+    end
+
+    subgraph Embeddings
+        D --> E[HuggingFace Embeddings]
+        E --> F[FAISS Vector Store]
+    end
+
+    subgraph LLM
+        G[User Query] --> H{Model Selection}
+        H --> I[Claude 3.5]
+        H --> J[Gemini 1.5]
+        F --> K[RetrievalQA Chain]
+        I --> K
+        J --> K
+    end
+
+    subgraph Output
+        K --> L[Text Response]
+        L --> M[Console Output]
+        L --> N[Text-to-Speech]
+    end
 ```
-
----
-
-This README provides an overview of the project, including setup instructions, code snippets, and future directions. 
-
-
-
-
-
-

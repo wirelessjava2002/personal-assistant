@@ -330,10 +330,10 @@ def main():
         console.print("\n[bold green]Setting up your personal assistant...[/bold green]")
         assistant.setup()
         
-        console.print("\n[bold]Welcome to your personal assistant![/bold]")
+        console.print(f"\n[bold]Welcome to your personal assistant! ({assistant.config.llm_type.value.title()})[/bold]")
         console.print("- Type 'exit' or 'quit' to end the session")
         console.print("- Type 'switch' to change between Gemini and Claude")
-        console.print(f"\n[bold green]Current LLM: {assistant.config.llm_type.value.title()}[/bold green]")
+   
         
         while True:
             question = console.input("\n[bold cyan]You:[/bold cyan] ")
