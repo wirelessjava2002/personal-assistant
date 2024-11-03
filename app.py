@@ -1,4 +1,5 @@
 import os
+import pyttsx3
 from langchain_community.document_loaders import DirectoryLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
@@ -28,6 +29,14 @@ def create_vector_store(chunks):
     vector_store = FAISS.from_documents(chunks, embeddings)
     return vector_store
 
+def initialize_speech_engine():
+    engine = pyttsx3.init()
+    return engine
+
+def speak_text(engine, text):
+    engine.say(text)
+    engine.runAndWait()
+
 def create_qa_chain(vector_store):
     # Initialize Claude 3.5 Sonnet
     llm = ChatAnthropic(
@@ -52,7 +61,11 @@ def main():
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise ValueError("Please set your ANTHROPIC_API_KEY in the .env file")
     
+    # Initialize text-to-speech engine
+    speech_engine = initialize_speech_engine()
+    
     print("Loading and processing documents...")
+    speak_text(speech_engine, "Loading and processing documents...")
     documents = load_documents()
     chunks = split_documents(documents)
     print(f"Loaded {len(documents)} documents and split them into {len(chunks)} chunks.")
@@ -80,11 +93,15 @@ def main():
             if relevant_docs:  # Check if any documents were retrieved
                 # Construct a response based on the retrieved documents
                 response = qa_chain.invoke(question)
-                print(f"\nAssistant: {response['result']}")
+                response_text = response['result']
+                print(f"\nAssistant: {response_text}")
+                speak_text(speech_engine, response_text)
             else:
                 # If no documents are found, fall back to the LLM's response
                 fallback_response = llm.invoke(question)  # Use your ChatAnthropic instance
-                print(f"\nAssistant (fallback): {fallback_response['result']}")
+                fallback_text = fallback_response['result']
+                print(f"\nAssistant (fallback): {fallback_text}")
+                speak_text(speech_engine, fallback_text)
         except Exception as e:
             print(f"\nError: {str(e)}")
 
