@@ -31,13 +31,25 @@ def create_vector_store(chunks):
 
 def initialize_speech_engine():
     try:
-        engine = pyttsx3.init()
+        # Try espeak driver first
+        engine = pyttsx3.init(driverName='espeak')
+        if engine is None:
+            # Fall back to default driver
+            engine = pyttsx3.init()
+        
         # Configure properties
         engine.setProperty('rate', 150)    # Speaking rate
         engine.setProperty('volume', 0.9)  # Volume (0.0 to 1.0)
+        
+        # Test if audio works
+        voices = engine.getProperty('voices')
+        if len(voices) == 0:
+            print("Warning: No voices found, audio output may not work")
+            
         return engine
     except Exception as e:
         print(f"TTS Initialization Error: {str(e)}")
+        print("Speech synthesis disabled - continuing without audio")
         return None
 
 def speak_text(engine, text):
