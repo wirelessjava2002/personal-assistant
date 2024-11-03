@@ -73,7 +73,14 @@ def main():
     print("Creating vector store...")
     vector_store = create_vector_store(chunks)
     
-    print("Initializing QA chain...")
+    print("Initializing LLM and QA chain...")
+    # Initialize Claude 3.5 Sonnet
+    llm = ChatAnthropic(
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        model="claude-3-sonnet-20240229",
+        temperature=0,
+        max_tokens=1000
+    )
     qa_chain = create_qa_chain(vector_store)
     
     print("\nWelcome to your personal assistant! Ask me anything about your documents.")
@@ -98,8 +105,8 @@ def main():
                 speak_text(speech_engine, response_text)
             else:
                 # If no documents are found, fall back to the LLM's response
-                fallback_response = llm.invoke(question)  # Use your ChatAnthropic instance
-                fallback_text = fallback_response['result']
+                fallback_response = llm.invoke(question)
+                fallback_text = fallback_response.content
                 print(f"\nAssistant (fallback): {fallback_text}")
                 speak_text(speech_engine, fallback_text)
         except Exception as e:
