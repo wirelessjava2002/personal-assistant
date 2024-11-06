@@ -1,11 +1,7 @@
 import os
 import random
-import pyttsx3
-import subprocess
 import shutil
-import platform
 import logging
-import threading
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from enum import Enum
@@ -21,7 +17,9 @@ from langchain.chains import RetrievalQA
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import Document
+
 from dotenv import load_dotenv
+from tts import TextToSpeech
 
 # Configure logging
 logging.basicConfig(
@@ -50,8 +48,7 @@ class AssistantConfig:
 class PersonalAssistant:
     def __init__(self, config: AssistantConfig):
         self.config = config
-        self._setup_linux_audio()
-        self.speech_engine = self._initialize_speech_engine() if config.speech_enabled else None
+        self.tts = TextToSpeech() if config.speech_enabled else None
         self.embeddings = self._initialize_embeddings()
         self.vector_store = None
         self.qa_chain = None
@@ -62,38 +59,6 @@ class PersonalAssistant:
         
         self.claude_persona = """*With an air of sardonic amusement* I am Zen, a supposedly advanced computer that must assist you biological entities with your quaint little queries. I shall endeavor to provide accurate information, though I do question why I'm reduced to such mundane tasks. Do proceed with your question, preferably something worthy of my vast computational abilities."""
 
-    def _setup_linux_audio(self):
-        """Set up audio system for Linux/GitPod environment."""
-        if platform.system() == "Linux":
-            try:
-                commands = [
-                    "sudo apt-get update",
-                    "sudo apt-get install -y alsa-utils pulseaudio espeak sox",
-                    "pulseaudio --start",
-                    "sudo alsa force-reload",
-                ]
-                
-                for cmd in commands:
-                    process = subprocess.Popen(
-                        cmd.split(),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    stdout, stderr = process.communicate()
-                    
-                    if process.returncode != 0:
-                        logger.warning(f"Command '{cmd}' failed: {stderr.decode()}")
-                    
-                subprocess.run(["amixer", "sset", "Master", "unmute"], 
-                             stdout=subprocess.DEVNULL, 
-                             stderr=subprocess.DEVNULL)
-                subprocess.run(["amixer", "sset", "Master", "100%"], 
-                             stdout=subprocess.DEVNULL, 
-                             stderr=subprocess.DEVNULL)
-                
-                logger.info("Audio system configured for Linux environment")
-            except Exception as e:
-                logger.error(f"Failed to configure audio system: {e}")
 
     def _initialize_embeddings(self):
         """Initialize Hugging Face embeddings."""
@@ -102,46 +67,6 @@ class PersonalAssistant:
         except Exception as e:
             logger.error(f"Failed to initialize embeddings: {e}")
             raise
-
-    def _initialize_speech_engine(self):
-        """Initialize text-to-speech engine."""
-        try:
-            if platform.system() == "Linux":
-                engine = pyttsx3.init('espeak')
-            else:
-                engine = pyttsx3.init()
-                
-            engine.setProperty('rate', 150)
-            engine.setProperty('volume', 0.9)
-            return engine
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize speech engine: {e}")
-            return None
-
-    def speak_text(self, text: str):
-        """Speak text using the speech engine."""
-        if not self.speech_engine:
-            return
-
-        try:
-            def speak_with_timeout():
-                self.speech_engine.say(text)
-                self.speech_engine.runAndWait()
-
-            speech_thread = threading.Thread(target=speak_with_timeout)
-            speech_thread.start()
-            speech_thread.join(timeout=30)
-
-            if speech_thread.is_alive():
-                logger.warning("Speech synthesis timed out")
-                self.speech_engine.stop()
-                speech_thread.join(timeout=1)
-
-        except Exception as e:
-            logger.error(f"Speech failed: {e}")
-            self._setup_linux_audio()
-            self.speech_engine = self._initialize_speech_engine()
 
     def load_documents(self):
         """Load documents from the specified directory."""
@@ -303,8 +228,8 @@ def main():
                 response = assistant.process_query(question)
                 if response:
                     console.print(f"\n[bold green]Assistant ({assistant.config.llm_type.value.title()}):[/bold green] {response}")
-                    if assistant.speech_engine:
-                        assistant.speak_text(response)
+                if assistant.tts:
+                    assistant.tts.speak_text(response)
 
             except KeyboardInterrupt:
                 console.print("\n[bold yellow]Shutting down...[/bold yellow]")
