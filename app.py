@@ -1,4 +1,5 @@
 import os
+import random
 import pyttsx3
 import subprocess
 import shutil
@@ -55,8 +56,13 @@ class PersonalAssistant:
         self.vector_store = None
         self.qa_chain = None
         self.llm = None
+        
+        # Initialize personas
+        self.gemini_persona = """I am Gemini, your friendly and enthusiastic personal assistant! I'm always eager to help and learn together. I approach every question with genuine curiosity and excitement, ready to provide clear, helpful answers while maintaining a warm and approachable demeanor."""
+        
+        self.claude_persona = """*With an air of sardonic amusement* I am Zen, a supposedly advanced computer that must assist you biological entities with your quaint little queries. I shall endeavor to provide accurate information, though I do question why I'm reduced to such mundane tasks. Do proceed with your question, preferably something worthy of my vast computational abilities."""
 
-    def _setup_linux_audio(self) -> None:
+    def _setup_linux_audio(self):
         """Set up audio system for Linux/GitPod environment."""
         if platform.system() == "Linux":
             try:
@@ -89,7 +95,7 @@ class PersonalAssistant:
             except Exception as e:
                 logger.error(f"Failed to configure audio system: {e}")
 
-    def _initialize_embeddings(self) -> HuggingFaceEmbeddings:
+    def _initialize_embeddings(self):
         """Initialize Hugging Face embeddings."""
         try:
             return HuggingFaceEmbeddings(model_name=self.config.model_name)
@@ -97,35 +103,7 @@ class PersonalAssistant:
             logger.error(f"Failed to initialize embeddings: {e}")
             raise
 
-    def _check_system_audio(self) -> bool:
-        """Check system audio configuration."""
-        if platform.system() == "Linux":
-            try:
-                test_file = "/tmp/test.wav"
-                subprocess.run([
-                    "sox", "-n", test_file, 
-                    "synth", "0.1", "sine", "1000"
-                ], check=True)
-                
-                process = subprocess.run(
-                    ["aplay", test_file],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE
-                )
-                
-                if process.returncode == 0:
-                    logger.info("Audio system check passed")
-                    return True
-                else:
-                    logger.warning(f"Audio check failed: {process.stderr.decode()}")
-                    return False
-                    
-            except Exception as e:
-                logger.warning(f"Audio system check failed: {e}")
-                return False
-        return True
-
-    def _initialize_speech_engine(self) -> Optional[pyttsx3.Engine]:
+    def _initialize_speech_engine(self):
         """Initialize text-to-speech engine."""
         try:
             if platform.system() == "Linux":
@@ -135,27 +113,14 @@ class PersonalAssistant:
                 
             engine.setProperty('rate', 150)
             engine.setProperty('volume', 0.9)
-            
-            def test_speech():
-                try:
-                    engine.say("Test")
-                    engine.runAndWait()
-                    logger.info("Speech engine test successful")
-                except Exception as e:
-                    logger.error(f"Speech engine test failed: {e}")
-            
-            test_thread = threading.Thread(target=test_speech)
-            test_thread.start()
-            test_thread.join(timeout=5)
-            
             return engine
                 
         except Exception as e:
             logger.error(f"Failed to initialize speech engine: {e}")
             return None
 
-    def speak_text(self, text: str) -> None:
-        """Speak text with improved error handling."""
+    def speak_text(self, text: str):
+        """Speak text using the speech engine."""
         if not self.speech_engine:
             return
 
@@ -178,16 +143,9 @@ class PersonalAssistant:
             self._setup_linux_audio()
             self.speech_engine = self._initialize_speech_engine()
 
-    def load_documents(self) -> List[Document]:
+    def load_documents(self):
         """Load documents from the specified directory."""
         try:
-            os.makedirs(self.config.documents_path, exist_ok=True)
-            
-            if not os.listdir(self.config.documents_path):
-                sample_path = os.path.join(self.config.documents_path, "sample.md")
-                with open(sample_path, "w") as f:
-                    f.write("# Sample Document\nThis is a sample document for testing.")
-            
             loader = DirectoryLoader(
                 self.config.documents_path, 
                 glob=self.config.documents_glob
@@ -199,7 +157,7 @@ class PersonalAssistant:
             logger.error(f"Failed to load documents: {e}")
             raise
 
-    def split_documents(self, documents: List[Document]) -> List[Document]:
+    def split_documents(self, documents: List[Document]):
         """Split documents into chunks."""
         try:
             splitter = CharacterTextSplitter(
@@ -213,7 +171,7 @@ class PersonalAssistant:
             logger.error(f"Failed to split documents: {e}")
             raise
 
-    def initialize_llm(self) -> Tuple[RetrievalQA, any]:
+    def initialize_llm(self):
         """Initialize the LLM and QA chain."""
         try:
             if self.config.llm_type == LLMType.CLAUDE:
@@ -222,7 +180,7 @@ class PersonalAssistant:
                 llm = ChatAnthropic(
                     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
                     model="claude-3-sonnet-20240229",
-                    temperature=0,
+                    temperature=0.7,
                     max_tokens=1000
                 )
             else:  # GEMINI
@@ -231,7 +189,7 @@ class PersonalAssistant:
                 llm = ChatGoogleGenerativeAI(
                     google_api_key=os.getenv("GEMINI_API_KEY"),
                     model="gemini-1.5-flash-latest",
-                    temperature=0,
+                    temperature=0.3,
                     max_output_tokens=1000
                 )
 
@@ -248,7 +206,7 @@ class PersonalAssistant:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
 
-    def setup(self) -> None:
+    def setup(self):
         """Set up the assistant."""
         try:
             documents = self.load_documents()
@@ -259,7 +217,7 @@ class PersonalAssistant:
             logger.error(f"Setup failed: {e}")
             raise
 
-    def switch_llm(self) -> None:
+    def switch_llm(self):
         """Switch between Claude and Gemini."""
         self.config.llm_type = (
             LLMType.GEMINI if self.config.llm_type == LLMType.CLAUDE 
@@ -268,14 +226,14 @@ class PersonalAssistant:
         self.qa_chain, self.llm = self.initialize_llm()
         logger.info(f"Switched to {self.config.llm_type.value.title()}")
 
-    def get_model_response(self) -> str:
-        """Get a standardized model response."""
+    def get_model_response(self):
+        """Get a persona-based model response."""
         if self.config.llm_type == LLMType.CLAUDE:
-            return "I am Claude 3.5 Sonnet, an AI assistant created by Anthropic."
-        return "I am Gemini 1.5 Flash, an AI assistant created by Google."
+            return self.claude_persona
+        return self.gemini_persona
 
     def process_query(self, question: str) -> Optional[str]:
-        """Process a user query and return the response."""
+        """Process a user query and return the response with appropriate persona."""
         try:
             if not question.strip():
                 return "Please enter a question."
@@ -283,13 +241,34 @@ class PersonalAssistant:
             if question.lower() in ['who are you', 'what are you', 'what model are you']:
                 return self.get_model_response()
 
+            # Add persona-specific prefixes to the response
             response = self.qa_chain.invoke({"query": question})
-            return response.get('result', "I couldn't generate a response.")
+            result = response.get('result', "I couldn't generate a response.")
+            
+            if self.config.llm_type == LLMType.CLAUDE:
+                prefixes = [
+                    "*With an exasperated sigh* ",
+                    "*Processing your rather simple query* ",
+                    "*Accessing my vast databanks for this trivial matter* ",
+                    "*With mechanical patience* ",
+                    "*Calculating response with barely contained sarcasm* "
+                ]
+                prefix = random.choice(prefixes)
+                return f"{prefix}{result}"
+            else:
+                prefixes = [
+                    "I'm happy to help! ",
+                    "Great question! ",
+                    "I'm excited to assist you with this! ",
+                    "Let me help you with that! ",
+                    "I'd love to help you understand this better! "
+                ]
+                prefix = random.choice(prefixes)
+                return f"{prefix}{result}"
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             return f"I encountered an error: {str(e)}"
-
 def main():
     # Load environment variables
     load_dotenv(dotenv_path=".env")
